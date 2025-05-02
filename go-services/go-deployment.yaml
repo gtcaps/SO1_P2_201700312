@@ -1,0 +1,152 @@
+# Go API Deployment (Deployment 1)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-api
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: go-api
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: go-api
+    spec:
+      containers:
+      - name: go-api
+        image: 34.172.226.212/weather-tweets/go-api:v1
+        ports:
+        - containerPort: 8080
+        env:
+        - name: RABBIT_GRPC_ADDR
+          value: "rabbit-writer-service:50051"
+        - name: KAFKA_GRPC_ADDR
+          value: "kafka-writer-service:50052"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      imagePullSecrets:
+      - name: harbor-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-api-service
+  namespace: weather-tweets
+spec:
+  selector:
+    app: go-api
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+# RabbitMQ Writer Deployment (Deployment 2)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbit-writer
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: rabbit-writer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: rabbit-writer
+    spec:
+      containers:
+      - name: rabbit-writer
+        image: 34.172.226.212/weather-tweets/rabbit-writer:v1
+        ports:
+        - containerPort: 50051
+        env:
+        - name: RABBITMQ_URI
+          value: "amqp://guest:guest@rabbitmq:5672/"
+        - name: RABBITMQ_QUEUE
+          value: "message"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      imagePullSecrets:
+      - name: harbor-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbit-writer-service
+  namespace: weather-tweets
+spec:
+  selector:
+    app: rabbit-writer
+  ports:
+  - port: 50051
+    targetPort: 50051
+  type: ClusterIP
+---
+# Kafka Writer Deployment (Deployment 3)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-writer
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: kafka-writer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kafka-writer
+    spec:
+      containers:
+      - name: kafka-writer
+        image: 34.172.226.212/weather-tweets/kafka-writer:v1
+        ports:
+        - containerPort: 50052
+        env:
+        - name: KAFKA_BROKER
+          value: "kafka:9092"
+        - name: KAFKA_TOPIC
+          value: "message"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      imagePullSecrets:
+      - name: harbor-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-writer-service
+  namespace: weather-tweets
+spec:
+  selector:
+    app: kafka-writer
+  ports:
+  - port: 50052
+    targetPort: 50052
+  type: ClusterIP

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weather-api-rust
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: weather-api-rust
+  replicas: 1  # Comenzamos con 1 réplica, HPA ajustará según la carga
+  template:
+    metadata:
+      labels:
+        app: weather-api-rust
+    spec:
+      containers:
+      - name: weather-api-rust
+        image: 34.172.226.212/weather-tweets/weather-api-rust:v1
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      imagePullSecrets:
+      - name: harbor-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weather-api-rust-service
+  namespace: weather-tweets
+spec:
+  selector:
+    app: weather-api-rust
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: weather-api-rust-hpa
+  namespace: weather-tweets
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: weather-api-rust
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 30
