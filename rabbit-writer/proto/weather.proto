@@ -1,0 +1,19 @@
+syntax = "proto3";
+package weather;
+
+option go_package = "rabbit-writer/proto";
+
+service WeatherService {
+  rpc PublishToRabbitMQ(WeatherData) returns (PublishResponse);
+}
+
+message WeatherData {
+  string description = 1;
+  string country = 2;
+  string weather = 3;
+}
+
+message PublishResponse {
+  bool success = 1;
+  string message = 2;
+}
