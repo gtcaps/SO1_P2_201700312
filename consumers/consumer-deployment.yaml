@@ -1,0 +1,73 @@
+# RabbitMQ Consumer Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbit-consumer
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: rabbit-consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: rabbit-consumer
+    spec:
+      containers:
+      - name: rabbit-consumer
+        image: 34.172.226.212/weather-tweets/rabbit-consumer:v1
+        env:
+        - name: RABBITMQ_URI
+          value: "amqp://guest:guest@rabbitmq:5672/"
+        - name: RABBITMQ_QUEUE
+          value: "message"
+        - name: VALKEY_ADDR
+          value: "valkey:6379"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      imagePullSecrets:
+      - name: harbor-registry-secret
+---
+# Kafka Consumer Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-consumer
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: kafka-consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kafka-consumer
+    spec:
+      containers:
+      - name: kafka-consumer
+        image: 34.172.226.212/weather-tweets/kafka-consumer:v1
+        env:
+        - name: KAFKA_BROKER
+          value: "kafka:9092"
+        - name: KAFKA_TOPIC
+          value: "message"
+        - name: KAFKA_GROUP_ID
+          value: "weather-consumer-group"
+        - name: REDIS_ADDR
+          value: "redis:6379"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      imagePullSecrets:
+      - name: harbor-registry-secret
