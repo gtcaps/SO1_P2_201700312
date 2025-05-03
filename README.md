@@ -165,3 +165,185 @@ spec:
 - Expone un servicio gRPC con método `PublishToKafka`
 - Recibe datos y los publica en el tópico "message" de Kafka
 - Utiliza el país como clave para particionamiento
+
+### 5. RabbitMQ Consumer (rabbit-consumer)
+
+**Descripción**: Consume mensajes de RabbitMQ y almacena estadísticas en Valkey.
+
+**Deployment**:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbit-consumer
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: rabbit-consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: rabbit-consumer
+    spec:
+      containers:
+      - name: rabbit-consumer
+        image: $HARBOR_IP/weather-tweets/rabbit-consumer:v1
+        env:
+        - name: RABBITMQ_URI
+          value: "amqp://guest:guest@rabbitmq:5672/"
+        - name: RABBITMQ_QUEUE
+          value: "message"
+        - name: VALKEY_ADDR
+          value: "valkey:6379"
+```
+
+**Funcionamiento**:
+- Consume mensajes de la cola "message" de RabbitMQ
+- Utiliza múltiples goroutines (worker pool pattern) para procesamiento concurrente
+- Almacena estadísticas en Valkey
+
+
+### 6. Kafka Consumer (kafka-consumer)
+
+**Descripción**: Consume mensajes de Kafka y almacena estadísticas en Redis.
+
+**Deployment**:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-consumer
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: kafka-consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kafka-consumer
+    spec:
+      containers:
+      - name: kafka-consumer
+        image: $HARBOR_IP/weather-tweets/kafka-consumer:v1
+        env:
+        - name: KAFKA_BROKER
+          value: "kafka:9092"
+        - name: KAFKA_TOPIC
+          value: "message"
+        - name: KAFKA_GROUP_ID
+          value: "weather-consumer-group"
+        - name: REDIS_ADDR
+          value: "redis:6379"
+```
+
+**Funcionamiento**:
+- Consume mensajes del tópico "message" de Kafka
+- Utiliza un pool de workers (goroutines) para procesamiento concurrente
+- Almacena estadísticas en Redis
+
+### 7. RabbitMQ
+
+**Descripción**: Message broker para publicación-suscripción basado en colas.
+
+**Deployment**: Utilizando Helm Chart de Bitnami
+
+**Funcionamiento**:
+- Almacena mensajes en colas durables
+- Proporciona garantías de entrega con ACK/NACK
+- Ofrece modelo push a los consumidores
+
+### 8. Kafka
+
+**Descripción**: Plataforma de streaming distribuida para publicación-suscripción.
+
+**Deployment**: Utilizando Helm Chart de Bitnami
+
+**Funcionamiento**:
+- Almacena mensajes en tópicos particionados
+- Retiene mensajes incluso después de ser consumidos
+- Ofrece modelo pull para los consumidores
+
+### 9. Redis y Valkey
+
+**Descripción**: Bases de datos en memoria para almacenar estadísticas.
+
+**Deployment**:
+```yaml
+# Redis StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: weather-tweets
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.0
+        args: ["--appendonly", "yes"]
+```
+
+### 10. Grafana
+
+**Descripción**: Plataforma de visualización para estadísticas.
+
+**Deployment**: Utilizando Helm Chart de Grafana
+
+## 11. Locust
+
+**Descripción**: Herramienta para pruebas de carga.
+
+**Deployment**:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust
+  namespace: weather-tweets
+spec:
+  selector:
+    matchLabels:
+      app: locust
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: locust
+    spec:
+      containers:
+      - name: locust
+        image: $HARBOR_IP/weather-tweets/locust:v1
+        env:
+        - name: TARGET_HOST
+          value: "http://$INGRESS_IP.nip.io"
+```
+
+## Respuestas
+
+### 1. ¿Cómo funciona Kafka?
+Kafka funciona como un sistema de mensajería que organiza los datos en particiones. Los producers envían mensajes a estos tópicos, y Kafka los almacena de forma persistente en discos. Los consumers leen estos mensajes cuando lo solicitan y pueden procesar datos a su propio ritmo. 
+
+### 2. ¿Cómo difiere Valkey de Redis?
+Valkey es un fork de Redis con diferencias principalmente en la licencia. Valkey usa la licencia BSD-3-Clause (más permisiva) mientras Redis usa RSAL para algunos módulos. Valkey tiene un enfoque más comunitario en su desarrollo, mientras Redis está más controlado por Redis Ltd. Técnicamente son muy similares.
+
+### 3. ¿Es mejor gRPC que HTTP?
+La comparación entre gRPC y HTTP REST no tiene una respuesta definitiva, ya que cada tecnología tiene ventajas en diferentes contextos. depende del caso de uso. gRPC ofrece mejor rendimiento gracias a Protocol Buffers (serialización binaria) y HTTP/2 (multiplexación), proporciona contratos de API formales con archivos .proto, y permite streaming bidireccional. HTTP REST es más universal, simple de implementar y depurar, funciona directamente en navegadores, y tiene mejor soporte.
+
+### 4. ¿Hubo una mejora al utilizar dos réplicas en los deployments de API REST y gRPC?
+Sí, se observaron mejoras significativas con dos réplicas. El rendimiento aumentó aproximadamente las  solicitudes por segundo. La latencia bajo y la carga se redujo. Se mejoro la distribución de recursos.
+
+### 5. Para los consumidores, ¿Qué utilizó y por qué?
+Utilizamos goroutines de Go porque son extremadamente livianas comparadas con hilos tradicionales. Esto permitió procesar más de 1,000 mensajes por segundo con uso estable de recursos, además de proporcionar recuperación automática ante fallos.
